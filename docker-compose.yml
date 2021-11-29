@@ -1,0 +1,48 @@
+version: "3.7"
+
+services:
+  
+  # Entrypoint from the web
+  reverse-proxy:
+    image: traefik:v2.3
+    command:
+      - --providers.docker
+      - --providers.docker.exposedByDefault=false
+      - --entrypoints.web.address=:80
+      - --api.insecure=true
+      - --api.debug=true
+    ports:
+      - 80:80
+      - 8080:8080
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  peerserver:
+    image: peerjs/peerjs-server
+    env_file:
+      - .env
+    expose: 
+      - 9000
+    command: "peerjs --port 9000 --key $PEERKEY --path /myp2p --proxied true --allow_discovery false"
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.peerserver.rule=PathPrefix(`/myp2p`)
+      - traefik.http.routers.peerserver.entrypoints=web
+
+  app:
+    image: node:16
+    expose:
+      - 1234
+    volumes:
+      - ./src:/app/src
+      - ./package.json:/app/package.json
+      - ./tsconfig.json:/app/tsconfig.json
+      - ./yarn.lock:/app/yarn.lock
+    command: >
+      bash -c "cd /app && 
+      yarn install &&
+      yarn start"
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.app.rule=PathPrefix(`/`)
+      - traefik.http.routers.app.entrypoints=web
